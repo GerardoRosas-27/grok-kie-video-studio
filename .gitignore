@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.key
+studio-history.json
+*.mp4
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.wav
+*.mp3
+.xai-oauth-auth.json

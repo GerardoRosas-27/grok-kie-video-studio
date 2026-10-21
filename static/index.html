@@ -1,0 +1,1043 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Estudio</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101114; --panel:#1b1d22; --line:#2c3038; --text:#f2f3f5; --muted:#9aa1ab; --accent:#7dffb2; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 15px/1.45 "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+    header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+    header p, .hint { margin: 0; color: var(--muted); }
+    main { width: 100%; padding: 16px 20px 28px; }
+    section { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; width: 100%; }
+    label { display: block; margin: 10px 0 6px; color: var(--muted); font-size: 13px; }
+    input, select, textarea, button { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: #111317; color: var(--text); padding: 9px 11px; font: inherit; }
+    textarea { min-height: 110px; resize: vertical; }
+    button { background: var(--accent); color: #102116; font-weight: 700; cursor: pointer; margin-top: 10px; }
+    button.ghost { background: transparent; color: var(--text); }
+    video, img.preview { width: 100%; max-height: 420px; object-fit: contain; background: #000; border-radius: 10px; margin-top: 8px; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .pick { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+    .pick button { width: auto; margin: 0; white-space: nowrap; }
+    @media (max-width: 760px) {
+      .row, .pick { grid-template-columns: 1fr; }
+      header { align-items: stretch; }
+    }
+    .scene, .ref-card { border: 1px solid var(--line); border-radius: 12px; padding: 10px; margin-top: 10px; }
+    .refs { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    .ref-media { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+    .cost { color: var(--accent); }
+    #board { display: none; margin-top: 14px; }
+    #log, #slog, #ilog { white-space: pre-wrap; color: var(--muted); }
+    nav { display: flex; gap: 8px; }
+    nav button { width: auto; margin: 0; }
+    nav button.active { background: var(--accent); color: #102116; }
+    .tab { display: none; }
+    .tab.on { display: block; }
+    .mini { width: 72px; height: 48px; object-fit: cover; border-radius: 8px; background: #000; }
+    .job-bar { height: 4px; margin-top: 8px; background: #243028; overflow: hidden; border-radius: 4px; }
+    .job-bar span { display: block; height: 100%; width: 35%; background: var(--accent); animation: slide 1.1s ease-in-out infinite; }
+    @keyframes slide { 0% { transform: translateX(-120%); } 100% { transform: translateX(320%); } }
+    .job-head { text-align: left; background: transparent; color: var(--text); }
+    .job-body { margin-top: 8px; }
+    button:disabled { opacity: .45; cursor: wait; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <strong>Estudio</strong>
+      <p>Video suelto, escenas a partir de una idea, o imagen. Grok por defecto.</p>
+    </div>
+    <nav>
+      <button class="ghost active" id="tab-video" type="button">Video</button>
+      <button class="ghost" id="tab-scenes" type="button">Escenas</button>
+      <button class="ghost" id="tab-image" type="button">Imagen</button>
+      <button class="ghost" id="tab-audio" type="button">Audio</button>
+      <button class="ghost" id="tab-refs" type="button">Referencias</button>
+      <button class="ghost" id="tab-edit" type="button">Editar</button>
+      <button class="ghost" id="tab-jobs" type="button">Historial</button>
+    </nav>
+    <p id="status">listo</p>
+  </header>
+
+
+  <main class="tab on" id="pane-video">
+    <section>
+      <strong>Un solo video</strong>
+      <label>Modelo</label>
+      <select id="model"></select>
+      <div class="row">
+        <div>
+          <label>Duración</label>
+          <select id="duration"><option value="">Segundos</option></select>
+          <label>Calidad</label>
+          <select id="quality"><option value="">Calidad</option></select>
+          <p id="vcost" class="cost"></p>
+          <label>Formato</label>
+          <select id="aspect">
+            <option value="">Formato</option>
+            <option>16:9</option>
+            <option>9:16</option>
+            <option>1:1</option>
+            <option>4:3</option>
+            <option>3:4</option>
+          </select>
+        </div>
+        <div>
+          <label>Imagen</label>
+          <div class="pick"><input id="image" value="" placeholder="Ruta de imagen" /><button class="ghost pick-image" type="button" data-target="image">Elegir</button></div>
+          <img class="mini" id="image-thumb" alt="" />
+        </div>
+      </div>
+      <label>Prompt</label>
+      <textarea id="prompt"></textarea>
+      <div class="row improve-row">
+        <select class="improve-model" data-target="prompt"></select>
+        <button class="ghost improve" type="button" data-target="prompt" data-kind="video">Mejorar prompt</button>
+      </div>
+      <div id="video-refs" hidden>
+        <label>Referencias de personaje</label>
+        <div class="refs"></div>
+        <button class="ghost add-ref" type="button">Agregar personaje</button>
+      </div>
+      <button id="go" type="button">Generar un video</button>
+      <p id="log"></p>
+      <video id="player" controls></video>
+    </section>
+  </main>
+
+  <main class="tab" id="pane-scenes">
+    <section>
+      <strong>Idea</strong>
+      <p class="hint">Grok solo estructura y mejora las escenas. No genera video hasta confirmar.</p>
+      <label>Idea</label>
+      <textarea id="idea" placeholder="Escribe la idea completa"></textarea>
+      <label>Modelo para estructurar y mejorar</label>
+      <div class="row improve-row">
+        <select id="planner" class="improve-model" data-target="idea"></select>
+        <button class="ghost improve" type="button" data-target="idea" data-kind="idea">Mejorar idea</button>
+      </div>
+      <div class="row">
+        <div>
+          <label>Número de escenas</label>
+          <input id="count" type="number" min="1" max="8" value="" placeholder="3" />
+          <label>Calidad</label>
+          <select id="squality"><option value="">Calidad</option></select>
+          <p id="scost" class="cost"></p>
+          <label>Formato</label>
+          <select id="saspect">
+            <option value="">Formato</option>
+            <option>16:9</option>
+            <option>9:16</option>
+            <option>1:1</option>
+            <option>4:3</option>
+            <option>3:4</option>
+          </select>
+        </div>
+        <div>
+          <label>Imagen inicial por defecto</label>
+          <div class="pick"><input id="default-image" value="" placeholder="Ruta de imagen" /><button class="ghost pick-image" type="button" data-target="default-image">Elegir</button></div>
+          <img class="mini" id="default-thumb" alt="" />
+          <label>Video base para extender</label>
+          <div class="pick"><input id="extend-video" placeholder="Opcional. Se usa si la primera escena es extensión nativa." /><button class="ghost pick-video" type="button">Elegir</button></div>
+        </div>
+      </div>
+      <button id="plan" type="button">Convertir idea en escenas</button>
+    </section>
+    <section id="board">
+      <strong>Configurar escenas</strong>
+      <p class="hint">La extensión nativa continúa el video anterior con grok-imagine-video, de 2 a 10 segundos extra. El primer clip puede ser Grok 1.5.</p>
+      <div id="scene-refs" hidden>
+        <label>Referencias si alguna escena usa Seedance referencias</label>
+        <div class="refs"></div>
+        <button class="ghost add-ref" type="button">Agregar personaje</button>
+      </div>
+      <div id="scenes"></div>
+      <button id="confirm" type="button">Confirmar generación</button>
+      <p id="slog"></p>
+      <video id="splayer" controls></video>
+    </section>
+  </main>
+
+  <main class="tab" id="pane-audio">
+    <section>
+      <strong>Diálogo</strong>
+      <p class="hint">Las 5 opciones más baratas de Kie para diálogo. Gemini Flash Lite es la más económica.</p>
+      <label>Modelo</label>
+      <select id="amodel">
+        <option value="grok" selected>Grok texto a voz (sesión)</option>
+        <option value="google/gemini-3-8-flash-lite-tts">Gemini 3.8 Flash Lite · más barata</option>
+        <option value="google/gemini-3-8-flash-tts">Gemini 3.8 Flash</option>
+        <option value="google/gemini-3-1-flash-tts">Gemini 3.1 Flash</option>
+        <option value="elevenlabs/text-to-speech-turbo-2-5">ElevenLabs Turbo 2.5</option>
+        <option value="elevenlabs/text-to-speech-multilingual-v2">ElevenLabs Multilingual V2</option>
+      </select>
+      <label>Segundos</label>
+      <select id="aseconds"><option value="">Segundos</option></select>
+      <div id="avoice-wrap" hidden>
+        <label>Tipo de voz</label>
+        <div class="pick"><select id="avoice"><option value="">Voz</option></select><button class="ghost" id="ademo" type="button" hidden>Escuchar</button></div>
+        <audio id="ademo-player" hidden></audio>
+      </div>
+      <p id="acost" class="cost"></p>
+      <label>Diálogo</label>
+      <textarea id="aprompt" placeholder="Lo que dice el personaje"></textarea>
+      <div class="row improve-row">
+        <select class="improve-model" data-target="aprompt"></select>
+        <button class="ghost improve" type="button" data-target="aprompt" data-kind="audio">Mejorar prompt</button>
+      </div>
+      <button id="ago" type="button">Generar diálogo</button>
+      <p id="alog"></p>
+    </section>
+  </main>
+  <main class="tab" id="pane-refs">
+    <section>
+      <strong>Referencias</strong>
+      <p class="hint">Cinco modelos de Kie que aceptan referencias. Seedance Mini es el barato y también está en Video y Escenas.</p>
+      <label>Modelo</label>
+      <select id="rmodel"></select>
+      <label>Calidad</label>
+      <select id="rquality"><option value="">Calidad</option></select>
+      <p id="rcost" class="cost"></p>
+      <div class="row">
+        <div>
+          <label>Segundos</label>
+          <select id="rseconds"><option value="">Segundos</option></select>
+        </div>
+        <div>
+          <label>Formato</label>
+          <select id="raspect"><option value="">Formato</option><option>16:9</option><option>9:16</option><option>1:1</option><option>4:3</option><option>3:4</option></select>
+        </div>
+      </div>
+      <div id="rscene-wrap">
+        <label>Imagen de escena</label>
+        <div class="pick"><input id="rscene" placeholder="Ruta de imagen" /><button class="ghost pick-image" type="button">Elegir</button></div>
+      </div>
+      <div id="rpeople-wrap">
+        <label>Personajes</label>
+        <div id="ref-people" class="refs"></div>
+        <button class="ghost add-ref" type="button">Agregar personaje</button>
+      </div>
+      <label>Prompt</label>
+      <textarea id="rprompt"></textarea>
+      <div class="row improve-row">
+        <select class="improve-model" data-target="rprompt"></select>
+        <button class="ghost improve" type="button" data-target="rprompt" data-kind="video">Mejorar prompt</button>
+      </div>
+      <button id="rgo" type="button">Generar con referencias</button>
+    </section>
+  </main>
+  <main class="tab" id="pane-edit">
+    <section>
+      <strong>Editar video</strong>
+      <p class="hint">Recorta con el editor. El video generado también se puede elegir desde Historial.</p>
+      <label>Video</label>
+      <div class="pick"><input id="clip" placeholder="Ruta del video" /><button class="ghost pick-video" type="button">Elegir</button></div>
+      <div class="row">
+        <input id="start" placeholder="inicio, ej. 0" />
+        <input id="end" placeholder="fin, ej. 6" />
+      </div>
+      <button id="trim" type="button">Recortar</button>
+      <p id="elog"></p>
+    </section>
+  </main>
+  <main class="tab" id="pane-jobs">
+    <section>
+      <strong>Historial</strong>
+      <p id="totals" class="hint"></p>
+      <p class="hint">Clic para ver el resultado. Otro clic lo oculta. La barra de cada fila es solo de ese proceso.</p>
+      <div id="jobs"></div>
+    </section>
+  </main>
+  <main class="tab" id="pane-image">
+    <section>
+      <strong>Crear o editar imagen</strong>
+      <p class="hint">Grok de la sesión por defecto. Seedream 4 y Seedream 5 Flash, a 1K, por Kie.</p>
+      <label>Modelo</label>
+      <select id="imodel"></select>
+      <label>Calidad</label>
+      <select id="iquality"><option value="">Calidad</option></select>
+      <p id="icost" class="cost"></p>
+      <label>Acción</label>
+      <select id="iaction">
+        <option value="create">Crear</option>
+        <option value="edit">Editar imagen</option>
+      </select>
+      <label>Relación</label>
+      <select id="iaspect">
+        <option>16:9</option>
+        <option>9:16</option>
+        <option>1:1</option>
+        <option>4:3</option>
+        <option>3:4</option>
+      </select>
+      <label>Imagen a editar</label>
+      <div class="pick"><input id="iimage" value="" placeholder="Ruta de imagen" /><button class="ghost pick-image" type="button" data-target="iimage">Elegir</button></div>
+      <img class="mini" id="iimage-thumb" alt="" />
+      <label>Prompt</label>
+      <textarea id="iprompt" placeholder="Describe la imagen, o el cambio si vas a editar"></textarea>
+      <div class="row improve-row">
+        <select class="improve-model" data-target="iprompt"></select>
+        <button class="ghost improve" type="button" data-target="iprompt" data-kind="image">Mejorar prompt</button>
+      </div>
+      <button id="ido" type="button">Generar imagen</button>
+      <p id="ilog"></p>
+      <img id="ipreview" class="preview" alt="" />
+      <div class="row">
+        <button class="ghost" id="iuse-video" type="button">Usar en video</button>
+        <button class="ghost" id="iuse-scenes" type="button">Usar en escenas</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let lastFile = "";
+    let models = {};
+    const status = document.querySelector("#status");
+    const log = document.querySelector("#log");
+    const player = document.querySelector("#player");
+
+    const seen = new Set();
+
+    function busy(on, label) {
+      if (label) status.textContent = label;
+    }
+
+    function show(file) {
+      lastFile = file;
+      const src = "/media/" + encodeURIComponent(file.split(/[\\/]/).pop()) + "?t=" + Date.now();
+      player.src = src;
+      document.querySelector("#splayer").src = src;
+      log.textContent = file;
+    }
+
+    function money(credits) {
+      const usd = Number(credits || 0) * 0.005;
+      return pesos(usd) + ` · ${Number(credits).toFixed(1)} créditos`;
+    }
+
+    function fillQuality(select, spec, selected) {
+      const values = (spec && spec.qualities) || [];
+      const current = selected == null ? select.value : String(selected);
+      select.innerHTML = `<option value="">Calidad</option>` + values.map((item) =>
+        `<option value="${item}" ${item === current ? "selected" : ""}>${item}</option>`
+      ).join("");
+    }
+
+    function quoteVideo(modelId, quality, seconds, target) {
+      const spec = models[modelId] || {};
+      if (spec.provider !== "kie") { target.textContent = "Grok de la sesión: no descuenta Kie."; return; }
+      const rate = (spec.rates || {})[quality];
+      if (!quality || !seconds || !rate) { target.textContent = "Elige calidad y segundos para ver el costo Kie."; return; }
+      target.textContent = "Estimado Kie: " + money(rate * Number(seconds));
+    }
+
+    function fillDuration(select, modelId, mode, selected) {
+      const spec = models[modelId] || {};
+      const values = mode === "extend" ? [2, 3, 4, 5, 6, 7, 8, 9, 10] : (spec.durations || []);
+      const current = selected == null ? select.value : String(selected);
+      select.innerHTML = `<option value="">Segundos</option>` + values.map((seconds) =>
+        `<option value="${seconds}" ${String(seconds) === current ? "selected" : ""}>${seconds} s</option>`
+      ).join("");
+    }
+
+    let images = {};
+    let audios = {};
+    let chatModels = ["grok-4.3"];
+    let chatDefault = "grok-4.3";
+
+    function fillChatModels(root) {
+      (root || document).querySelectorAll(".improve-model").forEach((select) => {
+        if (select.options.length) return;
+        select.innerHTML = chatModels.map((id) => `<option value="${id}" ${id === chatDefault ? "selected" : ""}>${id}</option>`).join("");
+      });
+    }
+
+    function modelOptions(selected) {
+      return Object.entries(models).map(([id, spec]) =>
+        `<option value="${id}" ${id === (selected || "grok") ? "selected" : ""}>${spec.label}</option>`
+      ).join("");
+    }
+
+    function renderScenes(items) {
+      const root = document.querySelector("#scenes");
+      const fallback = document.querySelector("#default-image").value;
+      root.innerHTML = "";
+      items.forEach((scene, index) => {
+        const card = document.createElement("div");
+        card.className = "scene";
+        card.innerHTML = `
+          <strong>Escena ${index + 1}${scene.title ? " · " + scene.title : ""}</strong>
+          <label>Prompt</label>
+          <textarea class="scene-prompt">${scene.prompt || ""}</textarea>
+          <div class="row improve-row">
+            <select class="improve-model"></select>
+            <button class="ghost improve" type="button" data-kind="video">Mejorar prompt</button>
+          </div>
+          <div class="row">
+            <div>
+              <label>Modelo</label>
+              <select class="scene-model">${modelOptions(scene.model || "grok")}</select>
+            </div>
+            <div>
+              <label>Segundos</label>
+              <select class="scene-duration"></select>
+            </div>
+            <div>
+              <label>Cómo empieza</label>
+              <select class="scene-mode">
+                <option value="image">Imagen inicial</option>
+                <option value="own_image">Imagen de esta escena</option>
+                <option value="last_frame">Último fotograma anterior</option>
+                <option value="extend">Extensión nativa (grok-imagine-video)</option>
+              </select>
+            </div>
+          </div>
+          <label>Imagen o video</label>
+          <div class="pick"><input class="scene-image" value="${scene.image_path || ""}" /><button class="ghost pick-any" type="button">Elegir</button></div>
+          <img class="mini scene-thumb" alt="" />
+        `;
+        const modelSelect = card.querySelector(".scene-model");
+        const modeSelect = card.querySelector(".scene-mode");
+        const durationSelect = card.querySelector(".scene-duration");
+        modeSelect.value = scene.mode || (index === 0 ? "image" : "extend");
+        modelSelect.value = scene.model || "grok";
+        fillDuration(durationSelect, modelSelect.value, modeSelect.value, scene.duration || "");
+        modelSelect.onchange = () => {
+          fillDuration(durationSelect, modelSelect.value, modeSelect.value);
+          document.querySelector("#scene-refs").hidden = ![...document.querySelectorAll(".scene-model")].some((item) => item.value === "seedance-ref");
+        };
+        modeSelect.onchange = () => fillDuration(durationSelect, modelSelect.value, modeSelect.value);
+        root.append(card);
+        fillChatModels(card);
+        paintThumb(card.querySelector(".scene-image"));
+      });
+      document.querySelector("#board").style.display = "block";
+    }
+
+    function readScenes() {
+      return [...document.querySelectorAll(".scene")].map((card) => ({
+        prompt: card.querySelector(".scene-prompt").value,
+        model: card.querySelector(".scene-model").value,
+        mode: card.querySelector(".scene-mode").value,
+        image_path: card.querySelector(".scene-image").value,
+        duration: Number(card.querySelector(".scene-duration").value) || 0,
+        aspect: document.querySelector("#saspect").value || "16:9",
+        resolution: document.querySelector("#squality").value,
+        characters: card.querySelector(".scene-model").value === "seedance-ref" ? readRefs(document.querySelector("#scene-refs")) : [],
+      }));
+    }
+
+    function openTab(id) {
+      document.querySelectorAll("nav button").forEach((button) => button.classList.toggle("active", button.id === id));
+      document.querySelector("#pane-video").classList.toggle("on", id === "tab-video");
+      document.querySelector("#pane-scenes").classList.toggle("on", id === "tab-scenes");
+      document.querySelector("#pane-image").classList.toggle("on", id === "tab-image");
+    }
+
+    document.querySelectorAll("nav button").forEach((button) => {
+      button.onclick = () => openTab(button.id);
+    });
+
+    async function load() {
+      const data = await (await fetch("/api/models")).json();
+      models = data.models;
+      images = data.images || {};
+      audios = data.audios || {};
+      chatModels = data.chat_models || chatModels;
+      chatDefault = data.chat_default || chatDefault;
+      document.querySelector("#model").innerHTML = modelOptions("grok");
+      fillChatModels();
+      document.querySelector("#model").onchange = () => syncVideo();
+      const extraRefs = {
+        "wan-r2v": { label: "Wan 2.7 · imágenes y una voz", provider: "kie", qualities: ["720p", "1080p"], rates: { "720p": 4, "1080p": 8 }, durations: [2, 3, 4, 5, 6, 7, 8, 9, 10], inputs: ["scene", "characters", "audio"] },
+        "kling-omni": { label: "Kling 3.0 Omni · imagen y audio por personaje", provider: "kie", qualities: ["720p", "1080p"], rates: { "720p": 14, "1080p": 20 }, durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], inputs: ["scene", "characters", "audio"] },
+        "happyhorse": { label: "HappyHorse · solo imágenes", provider: "kie", qualities: ["720p", "1080p"], rates: { "720p": 6, "1080p": 10 }, durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], inputs: ["scene", "characters"] },
+        "happyhorse-1-1": { label: "HappyHorse 1.1 · solo imágenes", provider: "kie", qualities: ["720p", "1080p"], rates: { "720p": 6, "1080p": 10 }, durations: [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15], inputs: ["scene", "characters"] },
+      };
+      Object.assign(models, extraRefs);
+      document.querySelector("#rmodel").innerHTML = Object.entries(models)
+        .filter(([, spec]) => (spec.inputs || []).includes("characters") || spec.reference)
+        .map(([id, spec]) => `<option value="${id}">${spec.label}</option>`).join("");
+      document.querySelector("#rmodel").value = "seedance-ref";
+      document.querySelector("#imodel").innerHTML = Object.entries(images).map(([id, spec]) => `<option value="${id}">${spec.label}</option>`).join("");
+      document.querySelector("#imodel").value = "grok";
+      syncVideo();
+      syncScenes();
+      syncImage();
+      syncAudio();
+      syncRefs();
+    }
+
+    function queued(data) {
+      status.textContent = data.job ? "en cola · " + data.job : (data.error || "error");
+      return Boolean(data.job);
+    }
+
+    function clearVideo() {
+      document.querySelector("#prompt").value = "";
+      document.querySelector("#image").value = "";
+
+      document.querySelector("#duration").value = "";
+      document.querySelector("#model").value = "grok";
+      document.querySelector("#aspect").value = "";
+      paintThumb(document.querySelector("#image"));
+    }
+
+    function clearScenes() {
+      document.querySelector("#idea").value = "";
+      document.querySelector("#count").value = "";
+      document.querySelector("#default-image").value = "";
+      document.querySelector("#extend-video").value = "";
+      document.querySelector("#saspect").value = "";
+      document.querySelector("#scenes").innerHTML = "";
+      document.querySelector("#board").style.display = "none";
+      paintThumb(document.querySelector("#default-image"));
+    }
+
+    function clearImage() {
+      document.querySelector("#iprompt").value = "";
+      document.querySelector("#iimage").value = "";
+      document.querySelector("#imodel").value = "grok";
+      document.querySelector("#iaction").value = "create";
+      paintThumb(document.querySelector("#iimage"));
+    }
+
+    function pesos(usd) {
+      const rate = window.mxnRate || 18.38;
+      return (Number(usd || 0) * rate).toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+    }
+
+    function paintTotals(billing) {
+      if (!billing) return;
+      window.mxnRate = billing.mxn_rate || window.mxnRate;
+      const kieLeft = billing.kie_credits == null
+        ? "saldo Kie no disponible"
+        : `${billing.kie_credits} créditos Kie restantes (${pesos(billing.kie_credits * 0.005)})`;
+      const grokUse = billing.grok_usd ? `Uso Grok en tareas: ${pesos(billing.grok_usd)}. ` : "Grok no reportó costo por tarea. ";
+      document.querySelector("#totals").textContent =
+        `Total Kie: ${pesos(billing.kie_usd)} · ${kieLeft}. ${grokUse}El saldo de la sesión Grok no lo expone la API.`;
+    }
+
+    function thumb(path) {
+      if (!path) return "";
+      return "/api/thumb?path=" + encodeURIComponent(path);
+    }
+
+    function paintThumb(input) {
+      const img = input.id === "image" ? document.querySelector("#image-thumb")
+        : input.id === "default-image" ? document.querySelector("#default-thumb")
+        : input.id === "iimage" ? document.querySelector("#iimage-thumb")
+        : input.parentElement?.parentElement?.querySelector(".scene-thumb");
+      if (!img) return;
+      img.src = input.value ? thumb(input.value) : "";
+    }
+
+    document.querySelector("#go").onclick = async () => {
+      busy(true, "enviando video a la cola…");
+      try {
+        const response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: document.querySelector("#model").value,
+            prompt: document.querySelector("#prompt").value,
+            image_path: document.querySelector("#image").value,
+            duration: Number(document.querySelector("#duration").value),
+            aspect: document.querySelector("#aspect").value,
+            resolution: document.querySelector("#quality").value,
+            characters: document.querySelector("#model").value === "seedance-ref" ? readRefs(document.querySelector("#video-refs")) : [],
+          }),
+        });
+        if (queued(await response.json())) clearVideo();
+      } catch (error) {
+        log.textContent = String(error);
+        busy(false, "error");
+      }
+    };
+
+    async function choose(kind, input) {
+      busy(true, "elige un archivo…");
+      try {
+        const response = await fetch("/api/pick", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ kind }),
+        });
+        const data = await response.json();
+        busy(false, "listo");
+        if (data.file && input) { input.value = data.file; paintThumb(input); }
+        if (data.error) status.textContent = data.error;
+      } catch (error) {
+        status.textContent = String(error);
+        busy(false, "error");
+      }
+    }
+
+    document.addEventListener("click", (event) => {
+      const button = event.target.closest(".pick-image, .pick-video, .pick-any, .pick-audio");
+      if (!button) return;
+      const kind = button.classList.contains("pick-video") ? "video" : button.classList.contains("pick-audio") ? "audio" : button.classList.contains("pick-any") ? "media" : "image";
+      const wrap = button.closest(".pick");
+      const input = wrap ? wrap.querySelector("input") : document.getElementById(button.dataset.target);
+      choose(kind, input);
+    });
+
+    document.querySelector("#trim").onclick = async () => {
+      const source = document.querySelector("#clip").value || lastFile;
+      if (!source) { document.querySelector("#elog").textContent = "Elige un video."; return; }
+      busy(true, "enviando recorte a la cola…");
+      try {
+        const response = await fetch("/api/trim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            file_path: source,
+            start_time: document.querySelector("#start").value || "0",
+            end_time: document.querySelector("#end").value || "6",
+          }),
+        });
+        queued(await response.json());
+      } catch (error) {
+        document.querySelector("#elog").textContent = String(error);
+        busy(false, "error");
+      }
+    };
+
+    document.querySelector("#plan").onclick = async () => {
+      const idea = document.querySelector("#idea").value.trim();
+      if (!idea) { status.textContent = "escribe la idea"; return; }
+      busy(true, "enviando idea a la cola…");
+      try {
+        const response = await fetch("/api/plan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idea, count: Number(document.querySelector("#count").value) || 3, model: document.querySelector("#planner").value }),
+        });
+        if (queued(await response.json())) clearScenes();
+      } catch (error) {
+        document.querySelector("#slog").textContent = String(error);
+        busy(false, "error");
+      }
+    };
+
+    document.querySelector("#confirm").onclick = async () => {
+      busy(true, "enviando escenas a la cola…");
+      try {
+        const response = await fetch("/api/scenes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scenes: readScenes(),
+            default_image: document.querySelector("#default-image").value,
+            base_video: document.querySelector("#extend-video").value,
+            aspect: document.querySelector("#saspect").value,
+          }),
+        });
+        if (queued(await response.json())) clearScenes();
+      } catch (error) {
+        document.querySelector("#slog").textContent = String(error);
+        busy(false, "error");
+      }
+    };
+
+    document.querySelector("#ido").onclick = async () => {
+      const action = document.querySelector("#iaction").value;
+      busy(true, "enviando imagen a la cola…");
+      document.querySelector("#ilog").textContent = "Quedó en Historial. Puedes seguir en otra pestaña.";
+      try {
+        const response = await fetch("/api/image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: document.querySelector("#imodel").value,
+            prompt: document.querySelector("#iprompt").value,
+            image_path: action === "edit" ? document.querySelector("#iimage").value : "",
+            aspect: document.querySelector("#iaspect").value,
+            resolution: document.querySelector("#iquality").value,
+          }),
+        });
+        if (queued(await response.json())) clearImage();
+      } catch (error) {
+        document.querySelector("#ilog").textContent = String(error);
+        busy(false, "error");
+      }
+    };
+
+    function useImage(tab) {
+      const path = document.querySelector("#ipreview").dataset.path;
+      if (!path) return;
+      document.querySelector("#image").value = path;
+      document.querySelector("#default-image").value = path;
+      document.querySelectorAll(".scene-image").forEach((input, index) => {
+        if (index === 0 || !input.value) input.value = path;
+      });
+      openTab(tab);
+    }
+
+    function openTab(id) {
+      document.querySelectorAll("nav button").forEach((button) => button.classList.toggle("active", button.id === id));
+      document.querySelector("#pane-video").classList.toggle("on", id === "tab-video");
+      document.querySelector("#pane-scenes").classList.toggle("on", id === "tab-scenes");
+      document.querySelector("#pane-image").classList.toggle("on", id === "tab-image");
+      document.querySelector("#pane-audio").classList.toggle("on", id === "tab-audio");
+      document.querySelector("#pane-refs").classList.toggle("on", id === "tab-refs");
+      document.querySelector("#pane-edit").classList.toggle("on", id === "tab-edit");
+      document.querySelector("#pane-jobs").classList.toggle("on", id === "tab-jobs");
+    }
+
+    const jobCards = new Map();
+
+    function fillJobMedia(card, job) {
+      const box = card.querySelector(".job-media");
+      const key = (job.files || []).join("|");
+      if (!key || box.dataset.filled === key) return;
+      box.dataset.filled = key;
+      box.innerHTML = (job.files || []).map((file) => {
+        const name = file.split(/[\\/]/).pop();
+        const media = "/media/" + encodeURIComponent(name);
+        if (/\.(png|jpe?g|webp|gif)$/i.test(name)) return `<img class="preview" src="${media}" alt="">`;
+        if (/\.(mp3|wav|m4a|ogg)$/i.test(name)) return `<audio src="${media}" controls></audio>`;
+        return `<video src="${media}" controls preload="metadata"></video>`;
+      }).join("");
+    }
+
+    function jobActions(job) {
+      const kind = job.kind;
+      const buttons = [];
+      buttons.push(`<button class="ghost reload-job" type="button">Cargar como se generó</button>`);
+      if (kind === "imagen") {
+        buttons.push(`<button class="ghost use-video" type="button">Usar imagen en video</button>`);
+        buttons.push(`<button class="ghost use-scenes" type="button">Usar imagen en escenas</button>`);
+      } else if (kind === "video" || kind === "escena") {
+        buttons.push(`<button class="ghost use-extend" type="button">Cargar en escenas para extender</button>`);
+      }
+      if (job.folder) buttons.push(`<button class="ghost open-folder" type="button" data-path="${job.folder}">Abrir carpeta</button>`);
+      return buttons.join("");
+    }
+
+    function syncJobs(jobs) {
+      const root = document.querySelector("#jobs");
+      if (!jobs.length) { root.innerHTML = "<p class='hint'>Nada en el historial.</p>"; jobCards.clear(); return; }
+      const ids = new Set(jobs.map((job) => job.id));
+      for (const [id, card] of jobCards) if (!ids.has(id)) { card.remove(); jobCards.delete(id); }
+      [...jobs].reverse().forEach((job) => {
+        let card = jobCards.get(job.id);
+        if (!card) {
+          card = document.createElement("article");
+          card.className = "scene";
+          card.dataset.id = job.id;
+          card.innerHTML = `<button class="ghost job-head" type="button"></button><div class="job-progress"></div><div class="job-body" hidden><p class="job-error hint"></p><div class="job-media"></div><div class="job-actions"></div></div>`;
+          card.querySelector(".job-head").onclick = () => {
+            const body = card.querySelector(".job-body");
+            body.hidden = !body.hidden;
+            if (!body.hidden) fillJobMedia(card, card.job);
+          };
+          root.prepend(card);
+          jobCards.set(job.id, card);
+        }
+        card.job = job;
+        const active = job.state === "queued" || job.state === "running";
+        const money = job.provider === "kie"
+          ? ` · ${pesos(job.usd)}`
+          : job.provider === "grok" && job.usd
+            ? ` · Grok ${pesos(job.usd)}`
+            : "";
+        card.querySelector(".job-head").textContent = `${job.title} · ${job.state}${money}`;
+        card.querySelector(".job-progress").innerHTML = active ? `<div class="job-bar"><span></span></div>` : "";
+        card.querySelector(".job-error").textContent = job.error || "";
+        if (!card.querySelector(".job-body").hidden) fillJobMedia(card, job);
+        card.querySelector(".job-actions").innerHTML = jobActions(job);
+      });
+    }
+
+    function loadOriginal(job) {
+      const input = job.inputs || {};
+      if (job.kind === "audio") {
+        document.querySelector("#amodel").value = input.model || "google/gemini-3-8-flash-lite-tts";
+        document.querySelector("#aprompt").value = input.prompt || "";
+        document.querySelector("#aseconds").value = input.seconds || "";
+        openTab("tab-audio");
+      } else if (job.kind === "referencia") {
+        document.querySelector("#rmodel").value = input.model || "seedance-ref";
+        document.querySelector("#rprompt").value = input.prompt || "";
+        document.querySelector("#raspect").value = input.aspect || "";
+        document.querySelector("#rseconds").value = input.duration || "";
+        document.querySelector("#rscene").value = input.scene_image || "";
+        openTab("tab-refs");
+      } else if (job.kind === "imagen") {
+        document.querySelector("#imodel").value = input.model || "grok";
+        document.querySelector("#iaction").value = input.action || (input.image_path ? "edit" : "create");
+        document.querySelector("#iprompt").value = input.prompt || "";
+        document.querySelector("#iimage").value = input.image_path || "";
+        document.querySelector("#iaspect").value = input.aspect || "16:9";
+        paintThumb(document.querySelector("#iimage"));
+        openTab("tab-image");
+      } else if (job.kind === "video") {
+        document.querySelector("#model").value = input.model || "grok";
+        document.querySelector("#prompt").value = input.prompt || "";
+        document.querySelector("#image").value = input.image_path || "";
+        fillDuration(document.querySelector("#duration"), input.model || "grok", "", input.duration || "");
+        document.querySelector("#aspect").value = input.aspect || "";
+        paintThumb(document.querySelector("#image"));
+        openTab("tab-video");
+      } else {
+        document.querySelector("#idea").value = input.idea || "";
+        document.querySelector("#count").value = input.count || (input.scenes || []).length || 3;
+        document.querySelector("#default-image").value = input.default_image || "";
+        document.querySelector("#extend-video").value = input.base_video || "";
+        document.querySelector("#saspect").value = input.aspect || (input.scenes && input.scenes[0] && input.scenes[0].aspect) || "";
+        paintThumb(document.querySelector("#default-image"));
+        const scenes = input.scenes || job.result?.scenes || [];
+        if (scenes.length) renderScenes(scenes);
+        openTab("tab-scenes");
+      }
+    }
+
+    function useNew(job, target) {
+      const file = (job.files || [])[0];
+      if (!file) return;
+      if (target === "video") {
+        document.querySelector("#image").value = file;
+        paintThumb(document.querySelector("#image"));
+        openTab("tab-video");
+      } else {
+        document.querySelector("#default-image").value = file;
+        document.querySelector("#extend-video").value = /\.mp4$/i.test(file) ? file : document.querySelector("#extend-video").value;
+        paintThumb(document.querySelector("#default-image"));
+        if (/\.mp4$/i.test(file) && !document.querySelector(".scene")) {
+          renderScenes([{ title: "Continuar", prompt: "" }]);
+          document.querySelector(".scene-mode").value = "extend";
+        }
+        openTab("tab-scenes");
+      }
+    }
+
+    async function poll() {
+      try {
+        const data = await (await fetch("/api/jobs")).json();
+        const jobs = data.jobs || [];
+        const active = jobs.filter((job) => job.state === "queued" || job.state === "running").length;
+        document.querySelector("#tab-jobs").textContent = active ? `Historial (${active})` : "Historial";
+        paintTotals(data.billing);
+        syncJobs(jobs);
+        for (const job of jobs) {
+          if (seen.has(job.id) || job.state !== "done" || !job.result?.scenes) continue;
+          seen.add(job.id);
+          renderScenes(job.result.scenes);
+        }
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    }
+
+    document.querySelector("#jobs").addEventListener("click", async (event) => {
+      const card = event.target.closest("[data-id]") || event.target.closest(".scene");
+      const job = card && card.job;
+      if (event.target.closest(".open-folder")) {
+        await fetch("/api/open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: event.target.closest(".open-folder").dataset.path }),
+        });
+        return;
+      }
+      if (!job) return;
+      if (event.target.closest(".reload-job")) loadOriginal(job);
+      if (event.target.closest(".use-video")) useNew(job, "video");
+      if (event.target.closest(".use-scenes") || event.target.closest(".use-extend")) useNew(job, "scenes");
+    });
+
+    document.addEventListener("click", async (event) => {
+      const button = event.target.closest(".improve");
+      if (!button) return;
+      const row = button.closest(".improve-row");
+      const textarea = button.dataset.target
+        ? document.getElementById(button.dataset.target)
+        : button.closest(".scene").querySelector(".scene-prompt");
+      if (!textarea.value.trim()) { status.textContent = "escribe el prompt"; return; }
+      button.disabled = true;
+      status.textContent = "mejorando prompt…";
+      try {
+        const response = await fetch("/api/improve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: row.querySelector(".improve-model").value,
+            prompt: textarea.value,
+            kind: button.dataset.kind || "video",
+          }),
+        });
+        const data = await response.json();
+        if (data.prompt) textarea.value = data.prompt;
+        status.textContent = data.error || "prompt mejorado";
+      } catch (error) {
+        status.textContent = String(error);
+      }
+      button.disabled = false;
+    });
+
+    document.querySelector("#iuse-video").onclick = () => useImage("tab-video");
+    document.querySelector("#iuse-scenes").onclick = () => useImage("tab-scenes");
+    document.querySelectorAll("nav button").forEach((button) => { button.onclick = () => openTab(button.id); });
+
+    ["#image", "#default-image", "#iimage"].forEach((id) => {
+      const input = document.querySelector(id);
+      input.addEventListener("change", () => paintThumb(input));
+      paintThumb(input);
+    });
+    function syncVideo() {
+      const id = document.querySelector("#model").value || "grok";
+      fillDuration(document.querySelector("#duration"), id);
+      fillQuality(document.querySelector("#quality"), models[id] || {});
+      document.querySelector("#video-refs").hidden = !(models[id] && (models[id].inputs || []).includes("characters"));
+      quoteVideo(id, document.querySelector("#quality").value, document.querySelector("#duration").value, document.querySelector("#vcost"));
+    }
+
+    function syncScenes() {
+      fillQuality(document.querySelector("#squality"), models.grok || {});
+      quoteVideo("grok", document.querySelector("#squality").value, document.querySelector("#count").value, document.querySelector("#scost"));
+    }
+
+    function syncImage() {
+      const spec = images[document.querySelector("#imodel").value] || {};
+      fillQuality(document.querySelector("#iquality"), spec);
+      const quality = document.querySelector("#iquality").value;
+      const credits = (spec.rates || {})[quality];
+      document.querySelector("#icost").textContent = spec.provider !== "kie" ? "Grok de la sesión: no descuenta Kie." : credits ? "Estimado Kie: " + money(credits) : "Elige calidad para ver el costo Kie.";
+    }
+
+    function syncAudio() {
+      const spec = audios[document.querySelector("#amodel").value] || {};
+      const voices = spec.voices || [];
+      const wrap = document.querySelector("#avoice-wrap");
+      wrap.hidden = !voices.length;
+      const current = document.querySelector("#avoice").value;
+      document.querySelector("#avoice").innerHTML = voices.map((voice) => `<option value="${voice.id}" data-demo="${voice.demo || ""}">${voice.label}</option>`).join("");
+      if (current && [...document.querySelector("#avoice").options].some((option) => option.value === current)) document.querySelector("#avoice").value = current;
+      const selected = document.querySelector("#avoice").selectedOptions[0];
+      const demo = selected?.dataset.demo || "";
+      document.querySelector("#ademo").hidden = !(demo || document.querySelector("#amodel").value === "grok");
+      const chars = (document.querySelector("#aprompt").value || "").length;
+      if (document.querySelector("#amodel").value === "grok") {
+        document.querySelector("#acost").textContent = "Grok de la sesión: no descuenta Kie. La primera escucha de cada voz genera una muestra corta.";
+        return;
+      }
+      const credits = spec.per_1k ? Math.max(1, chars / 1000) * spec.per_1k : 0;
+      document.querySelector("#acost").textContent = credits ? `Estimado Kie por ${chars} caracteres: ${money(credits)}. Los segundos no cambian este precio.` : "Escribe el diálogo para estimar.";
+    }
+
+    function syncRefs() {
+      const id = document.querySelector("#rmodel").value || "seedance-ref";
+      const spec = models[id] || { inputs: ["scene", "characters", "audio"], qualities: ["720p"], durations: [5] };
+      fillQuality(document.querySelector("#rquality"), spec.qualities ? spec : { qualities: ["720p"] });
+      const inputs = spec.inputs || ["image"];
+      document.querySelector("#rscene-wrap").hidden = !inputs.includes("scene") && !inputs.includes("image");
+      document.querySelector("#rpeople-wrap").hidden = !inputs.includes("characters");
+      document.querySelectorAll("#ref-people .ref-audio-col").forEach((item) => { item.hidden = !inputs.includes("audio"); });
+      quoteVideo(id, document.querySelector("#rquality").value, document.querySelector("#rseconds").value, document.querySelector("#rcost"));
+    }
+
+    function addRef(box) {
+      const row = document.createElement("div");
+      row.className = "ref-card";
+      row.innerHTML = `<label>Nombre</label><input class="ref-name" placeholder="personaje" />
+        <div class="ref-media">
+          <div><label>Imagen del personaje</label><div class="pick"><input class="ref-image" placeholder="Ruta de imagen" /><button class="ghost pick-image" type="button">Elegir</button></div><img class="mini scene-thumb" alt="" /></div>
+          <div class="ref-audio-col"><label>Audio del personaje</label><div class="pick"><input class="ref-audio" placeholder="Ruta de audio" /><button class="ghost pick-audio" type="button">Elegir</button></div></div>
+        </div>`;
+      box.append(row);
+      syncRefs();
+    }
+
+    function readRefs(root) {
+      return [...root.querySelectorAll(".scene")].map((row) => ({
+        name: row.querySelector(".ref-name").value,
+        image: row.querySelector(".ref-image").value,
+        audio: row.querySelector(".ref-audio").value,
+      })).filter((item) => item.image || item.audio);
+    }
+
+    document.querySelectorAll(".add-ref").forEach((button) => {
+      button.onclick = () => addRef(button.parentElement.querySelector(".refs"));
+    });
+    ["#aseconds", "#rseconds"].forEach((id) => {
+      const select = document.querySelector(id);
+      select.innerHTML = `<option value="">Segundos</option>` + [3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15].map((n) => `<option value="${n}">${n} s</option>`).join("");
+    });
+    ["#quality", "#duration"].forEach((id) => document.querySelector(id).addEventListener("change", syncVideo));
+    ["#squality", "#count"].forEach((id) => document.querySelector(id).addEventListener("change", () => quoteVideo(document.querySelector(".scene-model")?.value || "grok", document.querySelector("#squality").value, document.querySelector(".scene-duration")?.value || document.querySelector("#count").value, document.querySelector("#scost"))));
+    document.querySelector("#imodel").addEventListener("change", syncImage);
+    document.querySelector("#iquality").addEventListener("change", syncImage);
+    document.querySelector("#amodel").addEventListener("change", syncAudio);
+    document.querySelector("#avoice").addEventListener("change", syncAudio);
+    document.querySelector("#ademo").onclick = () => {
+      const selected = document.querySelector("#avoice").selectedOptions[0];
+      const demo = selected?.dataset.demo;
+      const src = demo && demo !== "session" ? demo : "/api/voice-demo?voice=" + encodeURIComponent(document.querySelector("#avoice").value || "eve");
+      const player = document.querySelector("#ademo-player");
+      player.src = src;
+      player.hidden = false;
+      player.play();
+    };
+    document.querySelector("#aprompt").addEventListener("input", syncAudio);
+    document.querySelector("#rmodel").addEventListener("change", syncRefs);
+    ["#rquality", "#rseconds"].forEach((id) => document.querySelector(id).addEventListener("change", syncRefs));
+
+    document.querySelector("#ago").onclick = async () => {
+      busy(true, "enviando diálogo a la cola…");
+      try {
+        const response = await fetch("/api/audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: document.querySelector("#amodel").value,
+            prompt: document.querySelector("#aprompt").value,
+            seconds: document.querySelector("#aseconds").value,
+            voice: document.querySelector("#avoice").value,
+          }),
+        });
+        if (queued(await response.json())) {
+          document.querySelector("#aprompt").value = "";
+          document.querySelector("#aseconds").value = "";
+        }
+      } catch (error) {
+        document.querySelector("#alog").textContent = String(error);
+      }
+    };
+
+    document.querySelector("#rgo").onclick = async () => {
+      busy(true, "enviando referencias a la cola…");
+      try {
+        const response = await fetch("/api/reference", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: document.querySelector("#rmodel").value,
+            prompt: document.querySelector("#rprompt").value,
+            aspect: document.querySelector("#raspect").value,
+            duration: document.querySelector("#rseconds").value,
+            resolution: document.querySelector("#rquality").value,
+            scene_image: document.querySelector("#rscene").value,
+            characters: readRefs(document.querySelector("#ref-people")),
+          }),
+        });
+        if (queued(await response.json())) {
+          document.querySelector("#rprompt").value = "";
+          document.querySelector("#rscene").value = "";
+          document.querySelector("#ref-people").innerHTML = "";
+        }
+      } catch (error) {
+        status.textContent = String(error);
+      }
+    };
+
+    load();
+    poll();
+    setInterval(poll, 2000);
+  </script>
+</body>
+</html>
