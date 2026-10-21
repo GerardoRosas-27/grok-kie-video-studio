@@ -57,9 +57,13 @@ Hay un ejemplo de registro en [config/video-studio.cordis.yml](config/video-stud
 | `KIE_KEY_FILE` | Archivo de una línea con la key de Kie. |
 | `FFMPEG_PATH` | `ffmpeg.exe`. |
 | `FFMPEG_MCP` | Ejecutable de ffmpeg-mcp-lite. |
-| `STUDIO_HISTORY` | JSON del historial y los costos. |
+| `STUDIO_DB` | SQLite local. Por defecto `config/mcp/studio.db`. |
 
 La carpeta de video se llama `ouput` a propósito. No la renombres si ya tienes archivos ahí.
+
+## Base local
+
+Al primer arranque se ejecuta [schema.sql](schema.sql) y se crea `studio.db`. Cada inicio abre una sesión nueva. El historial de la interfaz es solo el de esa sesión. Las sesiones anteriores se quedan en la base, en la misma máquina.
 
 ## Modelos
 

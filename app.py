@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import mimetypes
 import os
+import socket
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -1265,9 +1267,12 @@ def enqueue(kind: str, title: str, work, inputs: dict | None = None) -> str:
         "folder": "",
         "inputs": inputs or {},
         "result": None,
+        "session_id": SESSION_ID,
+        "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
     with JOBS_LOCK:
         JOBS.insert(0, job)
+    save_job(job)
 
     def run() -> None:
         with JOBS_LOCK:
@@ -1291,12 +1296,12 @@ def enqueue(kind: str, title: str, work, inputs: dict | None = None) -> str:
                 job["credits"] = credits
                 job["usd"] = usd
                 job["provider"] = provider
-            save_history()
+            save_job(job)
         except Exception as error:
             with JOBS_LOCK:
                 job["state"] = "error"
                 job["error"] = str(error)
-            save_history()
+            save_job(job)
 
     threading.Thread(target=run, daemon=True).start()
     return job["id"]
@@ -1314,32 +1319,116 @@ def cost_of(result) -> tuple[float, float, str]:
     return credits, usd, provider
 
 
-HISTORY = from_env("STUDIO_HISTORY", str(HARNESS / "config" / "mcp" / "studio-history.json"))
+DB_PATH = from_env("STUDIO_DB", str(HARNESS / "config" / "mcp" / "studio.db"))
+SCHEMA = ROOT / "schema.sql"
+SESSION_ID = uuid.uuid4().hex[:12]
 MXN_RATE = 18.38
 
 
-def save_history() -> None:
-    with JOBS_LOCK:
-        slim = []
-        for job in JOBS:
-            item = {key: job.get(key) for key in ("id", "kind", "title", "state", "error", "files", "folder", "inputs", "credits", "usd", "provider")}
-            result = job.get("result")
-            if isinstance(result, dict) and result.get("scenes"):
-                item["result"] = {"scenes": result["scenes"]}
-            slim.append(item)
-    HISTORY.parent.mkdir(parents=True, exist_ok=True)
-    HISTORY.write_text(json.dumps(slim, ensure_ascii=False), encoding="utf-8")
+def db() -> sqlite3.Connection:
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    return connection
+
+
+def init_db() -> None:
+    with db() as connection:
+        connection.executescript(SCHEMA.read_text(encoding="utf-8"))
+        connection.execute(
+            "INSERT OR IGNORE INTO sessions(id, started_at, machine) VALUES (?, ?, ?)",
+            (SESSION_ID, time.strftime("%Y-%m-%d %H:%M:%S"), socket.gethostname()),
+        )
+    import_json_history()
+
+
+def job_from_row(row: sqlite3.Row) -> dict:
+    result = json.loads(row["result_json"]) if row["result_json"] else None
+    return {
+        "id": row["id"],
+        "session_id": row["session_id"],
+        "kind": row["kind"],
+        "title": row["title"],
+        "state": row["state"],
+        "error": row["error"],
+        "files": json.loads(row["files_json"] or "[]"),
+        "folder": row["folder"],
+        "inputs": json.loads(row["inputs_json"] or "{}"),
+        "result": result,
+        "credits": row["credits"],
+        "usd": row["usd"],
+        "provider": row["provider"],
+    }
+
+
+def save_job(job: dict) -> None:
+    result = job.get("result")
+    if isinstance(result, dict) and result.get("scenes"):
+        result = {"scenes": result["scenes"]}
+    elif not isinstance(result, dict):
+        result = None
+    with db() as connection:
+        connection.execute(
+            """
+            INSERT INTO jobs(id, session_id, kind, title, state, error, files_json, folder, inputs_json, result_json, credits, usd, provider, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                state=excluded.state, error=excluded.error, files_json=excluded.files_json,
+                folder=excluded.folder, result_json=excluded.result_json, credits=excluded.credits,
+                usd=excluded.usd, provider=excluded.provider
+            """,
+            (
+                job["id"],
+                job.get("session_id") or SESSION_ID,
+                job.get("kind") or "",
+                job.get("title") or "",
+                job.get("state") or "",
+                job.get("error") or "",
+                json.dumps(job.get("files") or [], ensure_ascii=False),
+                job.get("folder") or "",
+                json.dumps(job.get("inputs") or {}, ensure_ascii=False),
+                json.dumps(result, ensure_ascii=False) if result else None,
+                float(job.get("credits") or 0),
+                float(job.get("usd") or 0),
+                job.get("provider") or "",
+                job.get("created_at") or time.strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
 
 
 def load_history() -> None:
-    if not HISTORY.is_file():
+    with db() as connection:
+        rows = connection.execute(
+            "SELECT * FROM jobs WHERE session_id = ? ORDER BY created_at DESC",
+            (SESSION_ID,),
+        ).fetchall()
+    with JOBS_LOCK:
+        JOBS.extend(job_from_row(row) for row in rows)
+
+
+def import_json_history() -> None:
+    legacy = from_env("STUDIO_HISTORY", str(HARNESS / "config" / "mcp" / "studio-history.json"))
+    if not legacy.is_file():
+        return
+    with db() as connection:
+        already = connection.execute("SELECT 1 FROM sessions WHERE id = 'importado'").fetchone()
+    if already:
         return
     try:
-        saved = json.loads(HISTORY.read_text(encoding="utf-8"))
+        saved = json.loads(legacy.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         return
-    with JOBS_LOCK:
-        JOBS.extend(item for item in saved if isinstance(item, dict) and item.get("id"))
+    with db() as connection:
+        connection.execute(
+            "INSERT INTO sessions(id, started_at, machine) VALUES ('importado', ?, ?)",
+            (time.strftime("%Y-%m-%d %H:%M:%S"), "json"),
+        )
+    for item in saved:
+        if not isinstance(item, dict) or not item.get("id"):
+            continue
+        item["session_id"] = "importado"
+        save_job(item)
 
 
 BILLING_AT = 0.0
@@ -1382,6 +1471,7 @@ def billing() -> dict:
     }
 
 
+init_db()
 load_history()
 
 
