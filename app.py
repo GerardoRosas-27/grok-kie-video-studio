@@ -30,10 +30,56 @@ AUTH = from_env("GROK_OAUTH_FILE", str(Path.home() / ".dsh" / ".xai-oauth-auth.j
 KIE_KEY = from_env("KIE_KEY_FILE", str(HARNESS / "config" / "mcp" / "kie.key"))
 FFMPEG_MCP = from_env("FFMPEG_MCP", str(HARNESS / "ffmpeg-mcp-lite" / ".venv" / "Scripts" / "ffmpeg-mcp-lite.exe"))
 FFMPEG = from_env("FFMPEG_PATH", str(HARNESS / "ffmpeg" / "bin" / "ffmpeg.exe"))
-MEDIA = from_env("STUDIO_MEDIA", str(HARNESS / "videos"))
+MEDIA = from_env("STUDIO_MEDIA", str(ROOT / "videos"))
+INPUT = MEDIA / "input"
 OUTPUT = MEDIA / "ouput"
 IMAGES = MEDIA / "imagenes"
 AUDIO = MEDIA / "audio"
+
+
+def legacy_media_roots() -> list[Path]:
+    roots = [HARNESS / "videos", Path(r"D:\harnes-code\videos")]
+    unique: list[Path] = []
+    seen: set[str] = set()
+    current = str(MEDIA).lower()
+    for root in roots:
+        key = str(root).lower()
+        if key == current or key in seen:
+            continue
+        seen.add(key)
+        unique.append(root)
+    return unique
+
+
+def relocate(value: str) -> str:
+    """Map stored harness media paths onto this app's videos folder."""
+    if not isinstance(value, str) or not value:
+        return value
+    path = Path(value)
+    if path.exists():
+        return str(path)
+    folded = str(path).replace("/", "\\")
+    lowered = folded.lower()
+    for root in legacy_media_roots():
+        prefix = str(root)
+        if lowered.startswith(prefix.lower()):
+            rest = folded[len(prefix):].lstrip("\\")
+            return str(MEDIA / rest) if rest else str(MEDIA)
+    return value
+
+
+def relocate_obj(value):
+    if isinstance(value, str):
+        return relocate(value)
+    if isinstance(value, list):
+        return [relocate_obj(item) for item in value]
+    if isinstance(value, dict):
+        return {key: relocate_obj(item) for key, item in value.items()}
+    return value
+
+
+def media_path(value: str) -> Path:
+    return Path(relocate(value))
 PORT = 7474
 CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
 PROMPT = (
@@ -240,12 +286,12 @@ GROK_VOICES = [
     {"id": "zenith", "label": "Zenith", "demo": "session"},
 ]
 AUDIO_MODELS = {
-    "grok": {"label": "Grok texto a voz (sesión)", "provider": "grok", "qualities": [], "voices": GROK_VOICES},
-    "google/gemini-3-8-flash-lite-tts": {"label": "Gemini 3.8 Flash Lite", "provider": "kie", "qualities": [], "per_1k": 1, "voices": GEMINI_VOICES},
-    "google/gemini-3-8-flash-tts": {"label": "Gemini 3.8 Flash", "provider": "kie", "qualities": [], "per_1k": 2, "voices": GEMINI_VOICES},
+    "grok": {"label": "Grok texto a voz (sesión)", "provider": "grok", "qualities": [], "voices": GROK_VOICES, "speed": {"min": 0.7, "max": 1.5, "step": 0.1, "value": 1}},
+    "google/gemini-3-8-flash-lite-tts": {"label": "Gemini 3.8 Flash Lite", "provider": "kie", "qualities": [], "per_1k": 1, "voices": GEMINI_VOICES, "emotion": {"min": 0, "max": 1, "step": 0.05, "value": 0.4}},
+    "google/gemini-3-8-flash-tts": {"label": "Gemini 3.8 Flash", "provider": "kie", "qualities": [], "per_1k": 2, "voices": GEMINI_VOICES, "emotion": {"min": 0, "max": 1, "step": 0.05, "value": 0.4}},
     "google/gemini-3-1-flash-tts": {"label": "Gemini 3.1 Flash", "provider": "kie", "qualities": [], "per_1k": 3},
-    "elevenlabs/text-to-speech-turbo-2-5": {"label": "ElevenLabs Turbo 2.5", "provider": "kie", "qualities": [], "per_1k": 8, "voices": ELEVEN_VOICES},
-    "elevenlabs/text-to-speech-multilingual-v2": {"label": "ElevenLabs Multilingual V2", "provider": "kie", "qualities": [], "per_1k": 12, "voices": ELEVEN_VOICES},
+    "elevenlabs/text-to-speech-turbo-2-5": {"label": "ElevenLabs Turbo 2.5", "provider": "kie", "qualities": [], "per_1k": 8, "voices": ELEVEN_VOICES, "speed": {"min": 0.7, "max": 1.2, "step": 0.05, "value": 1}, "emotion": {"min": 0, "max": 1, "step": 0.05, "value": 0}},
+    "elevenlabs/text-to-speech-multilingual-v2": {"label": "ElevenLabs Multilingual V2", "provider": "kie", "qualities": [], "per_1k": 12, "voices": ELEVEN_VOICES, "emotion": {"min": 0, "max": 1, "step": 0.05, "value": 0}},
 }
 
 
@@ -477,8 +523,11 @@ def kie_task(payload: dict) -> tuple[dict, str]:
     return done, result["resultUrls"][0]
 
 
-def grok_tts(text: str, voice: str, language: str = "es-MX") -> bytes:
-    data = json.dumps({"text": text, "voice_id": voice or "eve", "language": language}).encode()
+def grok_tts(text: str, voice: str, language: str = "es-MX", speed: float | None = None) -> bytes:
+    payload = {"text": text, "voice_id": voice or "eve", "language": language}
+    if speed:
+        payload["speed"] = max(0.7, min(1.5, float(speed)))
+    data = json.dumps(payload).encode()
     req = urllib.request.Request(
         "https://api.x.ai/v1/tts",
         data=data,
@@ -502,26 +551,44 @@ def grok_voice_demo(voice: str) -> Path:
     return target
 
 
-def make_audio(model_id: str, prompt: str, seconds: int | None, voice: str = "") -> dict:
+def emotion_style(value: float | None) -> str:
+    if value is None:
+        return "Habla natural."
+    level = max(0, min(1, float(value)))
+    if level < 0.25:
+        return "Habla calmada, neutra y contenida."
+    if level < 0.6:
+        return "Habla natural, con emoción moderada."
+    if level < 0.85:
+        return "Habla expresiva, con emoción clara."
+    return "Habla intensa, dramática y muy emocional."
+
+
+def make_audio(model_id: str, prompt: str, seconds: int | None, voice: str = "", speed: float | None = None, emotion: float | None = None) -> dict:
     if model_id == "grok":
         AUDIO.mkdir(parents=True, exist_ok=True)
         path = AUDIO / f"grok-{time.strftime('%H%M%S')}.mp3"
-        path.write_bytes(grok_tts(prompt, voice or "eve"))
+        path.write_bytes(grok_tts(prompt, voice or "eve", speed=speed))
         return {"file": str(path), "model": "grok", "folder": str(AUDIO), "provider": "grok"}
-    style = f"Duración aproximada: {seconds} segundos." if seconds else ""
+    duration = f" Duración aproximada: {seconds} segundos." if seconds else ""
     if model_id.startswith("google/"):
         speaker = {"speaker_id": "Speaker 1"}
         if voice:
             speaker["voice_name"] = voice
+        style = (emotion_style(emotion) + duration).strip() if emotion is not None or duration else "Habla natural."
         payload = {
             "model": model_id,
             "input": {
                 "speakers": [speaker],
-                "dialogue_turns": [{"speaker_id": "Speaker 1", "text": prompt, "style": style or "Natural dialogue"}],
+                "dialogue_turns": [{"speaker_id": "Speaker 1", "text": prompt, "style": style}],
             },
         }
     else:
         payload = {"model": model_id, "input": {"text": prompt, "voice": voice or "EkK5I93UQWFDigLMpZcX"}}
+        if speed is not None:
+            payload["input"]["speed"] = max(0.7, min(1.2, float(speed)))
+        if emotion is not None:
+            payload["input"]["style"] = max(0, min(1, float(emotion)))
     done, url = kie_task(payload)
     suffix = Path(urllib.parse.urlparse(url).path).suffix or ".wav"
     path = save_url(url, f"dialogo-{time.strftime('%H%M%S')}{suffix}", AUDIO)
@@ -536,8 +603,8 @@ def make_reference(model_id: str, prompt: str, aspect: str, duration: int | None
     for item in characters:
         image = item.get("image") or ""
         audio = item.get("audio") or ""
-        image_url = upload_kie(Path(image)) if image else ""
-        audio_url = upload_kie(Path(audio)) if audio else ""
+        image_url = upload_kie(media_path(image)) if image else ""
+        audio_url = upload_kie(media_path(audio)) if audio else ""
         if image_url:
             images.append(image_url)
         if audio_url:
@@ -545,7 +612,7 @@ def make_reference(model_id: str, prompt: str, aspect: str, duration: int | None
         if image_url:
             named.append({"name": item.get("name") or f"personaje{len(named) + 1}", "image": image_url, "audio": audio_url})
     if scene_image:
-        images.insert(0, upload_kie(Path(scene_image)))
+        images.insert(0, upload_kie(media_path(scene_image)))
     if not images:
         raise RuntimeError("Agrega al menos una imagen de personaje o de escena")
     seconds = int(duration or 5)
@@ -874,7 +941,7 @@ def plan_scenes(idea: str, count: int, model: str = "grok-4.3") -> list[dict]:
 
 def run_scenes(scenes: list[dict], default_image: str, base_video: str = "") -> list[dict]:
     results = []
-    previous: Path | None = Path(base_video) if base_video else None
+    previous: Path | None = media_path(base_video) if base_video else None
     for index, scene in enumerate(scenes):
         model = scene.get("model") or "grok"
         prompt = scene.get("prompt") or ""
@@ -892,7 +959,7 @@ def run_scenes(scenes: list[dict], default_image: str, base_video: str = "") -> 
                     raise RuntimeError("No hay video anterior para sacar el fotograma")
                 image = last_frame(previous)
             else:
-                image = Path(scene.get("image_path") or default_image)
+                image = media_path(scene.get("image_path") or default_image)
             item = generate(model, prompt, image, int(duration) if duration else None, scene.get("aspect") or "16:9", scene.get("characters") or [], scene.get("resolution"))
         item["scene"] = index + 1
         item["mode"] = mode
@@ -1061,6 +1128,13 @@ class Handler(BaseHTTPRequestHandler):
                 "chat_default": "grok-4.3",
                 "prompt": PROMPT,
                 "output": str(OUTPUT),
+                "media": {
+                    "root": str(MEDIA),
+                    "input": str(INPUT),
+                    "output": str(OUTPUT),
+                    "images": str(IMAGES),
+                    "audio": str(AUDIO),
+                },
             })
             return
         if path == "/api/videos":
@@ -1157,9 +1231,9 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/scenes":
                 body = json.loads(raw.decode())
-                scenes = body.get("scenes") or []
-                default_image = body.get("default_image") or ""
-                base_video = body.get("base_video") or ""
+                scenes = relocate_obj(body.get("scenes") or [])
+                default_image = relocate(body.get("default_image") or "")
+                base_video = relocate(body.get("base_video") or "")
                 job_id = enqueue("escena", f"Generar {len(scenes)} escenas", lambda: {"videos": run_scenes(scenes, default_image, base_video), "folder": str(OUTPUT)}, {"scenes": scenes, "default_image": default_image, "base_video": base_video, "aspect": body.get("aspect") or ""})
                 self.send_json({"job": job_id})
                 return
@@ -1169,7 +1243,9 @@ class Handler(BaseHTTPRequestHandler):
                 prompt = body["prompt"]
                 seconds = int(body["seconds"]) if body.get("seconds") else None
                 voice = body.get("voice") or ""
-                job_id = enqueue("audio", f"Diálogo · {model}", lambda: make_audio(model, prompt, seconds, voice), {"model": model, "prompt": prompt, "seconds": seconds, "voice": voice, "kind": "audio"})
+                speed = float(body["speed"]) if body.get("speed") not in (None, "") else None
+                emotion = float(body["emotion"]) if body.get("emotion") not in (None, "") else None
+                job_id = enqueue("audio", f"Diálogo · {model}", lambda: make_audio(model, prompt, seconds, voice, speed, emotion), {"model": model, "prompt": prompt, "seconds": seconds, "voice": voice, "speed": speed, "emotion": emotion, "kind": "audio"})
                 self.send_json({"job": job_id})
                 return
             if path == "/api/reference":
@@ -1178,8 +1254,8 @@ class Handler(BaseHTTPRequestHandler):
                 prompt = body["prompt"]
                 aspect = body.get("aspect") or "16:9"
                 duration = body.get("duration")
-                characters = body.get("characters") or []
-                scene_image = body.get("scene_image") or ""
+                characters = relocate_obj(body.get("characters") or [])
+                scene_image = relocate(body.get("scene_image") or "")
                 job_id = enqueue(
                     "referencia",
                     f"Referencia · {model}",
@@ -1190,7 +1266,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/image":
                 body = json.loads(raw.decode())
-                image = Path(body["image_path"]) if body.get("image_path") else None
+                image = media_path(body["image_path"]) if body.get("image_path") else None
                 model = body.get("model") or "grok"
                 prompt = body["prompt"]
                 aspect = body.get("aspect") or "16:9"
@@ -1201,12 +1277,12 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/frame":
                 body = json.loads(raw.decode())
-                frame = last_frame(Path(body["file_path"]))
+                frame = last_frame(media_path(body["file_path"]))
                 self.send_json({"file": str(frame)})
                 return
             if path == "/api/generate":
                 body = json.loads(raw.decode())
-                image = Path(body["image_path"]) if body.get("image_path") else None
+                image = media_path(body["image_path"]) if body.get("image_path") else None
                 model = body.get("model") or "grok"
                 prompt = body["prompt"]
                 duration = body.get("duration")
@@ -1218,7 +1294,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if path == "/api/trim":
                 body = json.loads(raw.decode())
-                file_path = body["file_path"]
+                file_path = relocate(body["file_path"])
                 start_time = str(body["start_time"])
                 end_time = str(body["end_time"])
                 job_id = enqueue("video", "Recortar video", lambda: {"result": ffmpeg_mcp("ffmpeg_trim", {"file_path": file_path, "start_time": start_time, "end_time": end_time}), "folder": str(OUTPUT)})
@@ -1247,7 +1323,9 @@ def pick_path(kind: str) -> str:
     else:
         types = [("Imágenes", "*.png *.jpg *.jpeg *.webp *.gif"), ("Todos", "*.*")]
         title = "Seleccionar imagen"
-    chosen = filedialog.askopenfilename(title=title, filetypes=types)
+    start = {"video": OUTPUT, "audio": AUDIO, "media": INPUT}.get(kind, INPUT)
+    start.mkdir(parents=True, exist_ok=True)
+    chosen = filedialog.askopenfilename(title=title, filetypes=types, initialdir=str(start))
     root.destroy()
     return chosen or ""
 
@@ -1352,10 +1430,10 @@ def job_from_row(row: sqlite3.Row) -> dict:
         "title": row["title"],
         "state": row["state"],
         "error": row["error"],
-        "files": json.loads(row["files_json"] or "[]"),
-        "folder": row["folder"],
-        "inputs": json.loads(row["inputs_json"] or "{}"),
-        "result": result,
+        "files": relocate_obj(json.loads(row["files_json"] or "[]")),
+        "folder": relocate(row["folder"] or ""),
+        "inputs": relocate_obj(json.loads(row["inputs_json"] or "{}")),
+        "result": relocate_obj(result),
         "credits": row["credits"],
         "usd": row["usd"],
         "provider": row["provider"],
@@ -1481,7 +1559,7 @@ def job_snapshot() -> list[dict]:
 
 
 def open_folder(path: str) -> None:
-    folder = Path(path).resolve()
+    folder = media_path(path).resolve()
     allowed = MEDIA.resolve()
     if allowed not in folder.parents and folder != allowed:
         raise RuntimeError(f"Carpeta fuera de {MEDIA}")
@@ -1491,6 +1569,7 @@ def open_folder(path: str) -> None:
 
 
 def serve() -> None:
+    INPUT.mkdir(parents=True, exist_ok=True)
     OUTPUT.mkdir(parents=True, exist_ok=True)
     IMAGES.mkdir(parents=True, exist_ok=True)
     AUDIO.mkdir(parents=True, exist_ok=True)
@@ -1512,14 +1591,14 @@ def main() -> None:
         @studio.tool()
         def studio_generate(prompt: str, model: str = "grok", image_path: str = "", duration: int = 0) -> str:
             """Generate a video. Default model is grok. Kie ids: seedance-1-pro, seedance-1-5, seedance-2-mini."""
-            image = Path(image_path) if image_path else None
+            image = media_path(image_path) if image_path else None
             return json.dumps(generate(model, prompt, image, duration or None), ensure_ascii=False)
 
         @studio.tool()
         def studio_trim(file_path: str, start_time: str, end_time: str) -> str:
             """Trim a video through the FFmpeg editor MCP."""
             return ffmpeg_mcp("ffmpeg_trim", {
-                "file_path": file_path,
+                "file_path": relocate(file_path),
                 "start_time": start_time,
                 "end_time": end_time,
             })

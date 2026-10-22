@@ -49,8 +49,8 @@ Hay un ejemplo de registro en [config/video-studio.cordis.yml](config/video-stud
 
 | Variable | Uso |
 | --- | --- |
-| `HARNESS_HOME` | Carpeta base. Por defecto `D:\harnes-code`. |
-| `STUDIO_MEDIA` | Carpeta de salida. Por defecto `videos` dentro de `HARNESS_HOME`. |
+| `HARNESS_HOME` | Carpeta del harness, solo para FFmpeg y la key de Kie. Por defecto `D:\harnes-code`. |
+| `STUDIO_MEDIA` | Recursos de esta app. Por defecto `videos` junto a `app.py`, no dentro del harness. |
 | `GROK_OAUTH_FILE` | JSON de la sesión OAuth de xAI. |
 | `XAI_API_KEY` o `GROK_TOKEN` | Token directo, si no hay archivo OAuth. |
 | `KIE_API_KEY` | Key de Kie. |
@@ -59,7 +59,14 @@ Hay un ejemplo de registro en [config/video-studio.cordis.yml](config/video-stud
 | `FFMPEG_MCP` | Ejecutable de ffmpeg-mcp-lite. |
 | `STUDIO_DB` | SQLite local. Por defecto `config/mcp/studio.db`. |
 
-La carpeta de video se llama `ouput` a propósito. No la renombres si ya tienes archivos ahí.
+Los recursos viven en `videos/` dentro de la app:
+
+- `videos/input`: imágenes y archivos de entrada. El selector de imagen abre aquí.
+- `videos/ouput`: videos generados. El nombre está mal escrito a propósito. No lo renombres si ya tienes archivos ahí.
+- `videos/imagenes`: imágenes generadas.
+- `videos/audio`: diálogos y muestras.
+
+Esa carpeta no se sube al repositorio. Si un trabajo viejo todavía apunta a `D:\harnes-code\videos`, la app lo redirige a `videos/` local.
 
 ## Base local
 

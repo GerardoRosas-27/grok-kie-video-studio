@@ -11,4 +11,11 @@ studio-history.json
 *.webp
 *.wav
 *.mp3
+*.gif
+*.mov
+*.webm
+*.mkv
+*.m4a
+*.ogg
+videos/
 .xai-oauth-auth.json

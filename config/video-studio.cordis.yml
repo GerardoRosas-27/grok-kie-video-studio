@@ -1,15 +1,16 @@
-# Ejemplo para DeepSeek Harness. Ajusta las rutas a tu máquina.
+# Ejemplo para registrar el MCP. La app está en D:/video-studio, no dentro del harness.
 # serverName debe coincidir con [A-Za-z0-9_-]{1,32}.
 - id: mcp-video-studio
   name: "@deepseek-ai/dsh-mcp-client"
   config:
     serverName: video_studio
     transport: stdio
-    command: python
-    args: ["app.py", "--mcp"]
+    command: D:/video-studio/.venv/Scripts/python.exe
+    args: ["D:/video-studio/app.py", "--mcp"]
     toolCallTimeoutMs: 700000
     env:
       HARNESS_HOME: D:/harnes-code
+      STUDIO_MEDIA: D:/video-studio/videos
       KIE_KEY_FILE: D:/harnes-code/config/mcp/kie.key
       FFMPEG_PATH: D:/harnes-code/ffmpeg/bin/ffmpeg.exe
       FFMPEG_MCP: D:/harnes-code/ffmpeg-mcp-lite/.venv/Scripts/ffmpeg-mcp-lite.exe

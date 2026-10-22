@@ -50,6 +50,7 @@
     <div>
       <strong>Estudio</strong>
       <p>Video suelto, escenas a partir de una idea, o imagen. Grok por defecto.</p>
+      <p class="hint">Entrada en videos/input. El resultado va a videos/ouput, videos/imagenes o videos/audio.</p>
     </div>
     <nav>
       <button class="ghost active" id="tab-video" type="button">Video</button>
@@ -181,6 +182,14 @@
         <label>Tipo de voz</label>
         <div class="pick"><select id="avoice"><option value="">Voz</option></select><button class="ghost" id="ademo" type="button" hidden>Escuchar</button></div>
         <audio id="ademo-player" hidden></audio>
+      </div>
+      <div id="aspeed-wrap" hidden>
+        <label>Rapidez <span id="aspeed-value">1</span></label>
+        <input id="aspeed" type="range" min="0.7" max="1.5" step="0.1" value="1" />
+      </div>
+      <div id="aemotion-wrap" hidden>
+        <label>Emoción <span id="aemotion-value">0</span></label>
+        <input id="aemotion" type="range" min="0" max="1" step="0.05" value="0" />
       </div>
       <p id="acost" class="cost"></p>
       <label>Diálogo</label>
@@ -921,6 +930,27 @@
       const selected = document.querySelector("#avoice").selectedOptions[0];
       const demo = selected?.dataset.demo || "";
       document.querySelector("#ademo").hidden = !(demo || document.querySelector("#amodel").value === "grok");
+      const speed = document.querySelector("#aspeed");
+      const emotion = document.querySelector("#aemotion");
+      const modelId = document.querySelector("#amodel").value;
+      document.querySelector("#aspeed-wrap").hidden = !spec.speed;
+      document.querySelector("#aemotion-wrap").hidden = !spec.emotion;
+      if (spec.speed && speed.dataset.model !== modelId) {
+        speed.min = spec.speed.min;
+        speed.max = spec.speed.max;
+        speed.step = spec.speed.step;
+        speed.value = spec.speed.value;
+        speed.dataset.model = modelId;
+      }
+      if (spec.emotion && emotion.dataset.model !== modelId) {
+        emotion.min = spec.emotion.min;
+        emotion.max = spec.emotion.max;
+        emotion.step = spec.emotion.step;
+        emotion.value = spec.emotion.value;
+        emotion.dataset.model = modelId;
+      }
+      document.querySelector("#aspeed-value").textContent = Number(speed.value).toFixed(2);
+      document.querySelector("#aemotion-value").textContent = Number(emotion.value).toFixed(2);
       const chars = (document.querySelector("#aprompt").value || "").length;
       if (document.querySelector("#amodel").value === "grok") {
         document.querySelector("#acost").textContent = "Grok de la sesión: no descuenta Kie. La primera escucha de cada voz genera una muestra corta.";
@@ -984,6 +1014,8 @@
       player.play();
     };
     document.querySelector("#aprompt").addEventListener("input", syncAudio);
+    document.querySelector("#aspeed").addEventListener("input", () => { document.querySelector("#aspeed-value").textContent = Number(document.querySelector("#aspeed").value).toFixed(2); });
+    document.querySelector("#aemotion").addEventListener("input", () => { document.querySelector("#aemotion-value").textContent = Number(document.querySelector("#aemotion").value).toFixed(2); });
     document.querySelector("#rmodel").addEventListener("change", syncRefs);
     ["#rquality", "#rseconds"].forEach((id) => document.querySelector(id).addEventListener("change", syncRefs));
 
@@ -998,6 +1030,8 @@
             prompt: document.querySelector("#aprompt").value,
             seconds: document.querySelector("#aseconds").value,
             voice: document.querySelector("#avoice").value,
+            speed: document.querySelector("#aspeed-wrap").hidden ? "" : document.querySelector("#aspeed").value,
+            emotion: document.querySelector("#aemotion-wrap").hidden ? "" : document.querySelector("#aemotion").value,
           }),
         });
         if (queued(await response.json())) {
